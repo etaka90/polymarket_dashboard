@@ -1,3 +1,1 @@
-# polymarket_dashboard
-# polymarket_dashboard
-# polymarket_dashboard
+./venv/bin/python app.py
