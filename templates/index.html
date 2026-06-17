@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket Bots Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f11;
+    --surface: #1a1a1f;
+    --surface2: #222228;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8e8ea;
+    --muted: #6b6b75;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --amber: #f59e0b;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+  .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .last-update { font-size: 12px; color: var(--muted); }
+  .btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; transition: background .15s; }
+  .btn:hover { background: #2a2a32; }
+  .btn.loading { opacity: .6; pointer-events: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Summary cards */
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .stat-val { font-size: 26px; font-weight: 600; color: #fff; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .green { color: var(--green) !important; }
+  .red { color: var(--red) !important; }
+
+  /* Bot grid */
+  .section-title { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+  .bots-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .bot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: border-color .15s; }
+  .bot-card:hover { border-color: rgba(255,255,255,0.18); }
+  .bot-card.selected { border-color: var(--blue); }
+  .bot-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .bot-name { font-size: 13px; font-weight: 500; color: #fff; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+  .badge-ok { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-err { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-load { background: rgba(255,255,255,.08); color: var(--muted); }
+  .bot-bal { font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .bot-matic { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .bot-footer { display: flex; gap: 14px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .bot-footer span { color: var(--text); font-weight: 500; }
+  .bot-proxy { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: monospace; }
+  .bot-proxy a { color: var(--blue); text-decoration: none; }
+  .bot-proxy a:hover { text-decoration: underline; }
+
+  /* Chart panel */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+  .tab.active { background: var(--surface2); color: var(--text); border-color: rgba(255,255,255,0.15); }
+
+  /* Txns table */
+  .txn-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 400; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,.04); }
+  tr:last-child td { border-bottom: none; }
+  .txn-in { color: var(--green); font-weight: 500; }
+  .txn-out { color: var(--red); font-weight: 500; }
+  .txn-hash { font-family: monospace; color: var(--blue); cursor: pointer; }
+  .txn-hash:hover { text-decoration: underline; }
+  .txn-select { margin-bottom: 10px; }
+  .txn-select select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 6px; font-size: 12px; }
+
+  /* Spinner */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error */
+  .error-banner { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--red); margin-bottom: 16px; display: none; }
+
+  /* Setup hint */
+  .setup-hint { background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.25); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; line-height: 1.7; }
+  .setup-hint code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; }
+  .setup-hint b { color: #fff; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="dot" id="status-dot"></div>
+      <h1>Polymarket Bots</h1>
+    </div>
+    <div class="header-right">
+      <span class="last-update" id="last-update">—</span>
+      <button class="btn" onclick="refresh()" id="refresh-btn">
+        <span id="refresh-icon">↻</span> Обновить
+      </button>
+      <span style="font-size:12px;color:var(--muted)">Auto: <span id="countdown">60</span>s</span>
+    </div>
+  </div>
+
+  <div class="setup-hint" id="setup-hint" style="display:none">
+    ⚠️ <b>Заполните BOTS в app.py</b> — добавьте PROXY_ADDRESS каждого бота.<br>
+    Для снятия лимитов получите бесплатный ключ на <a href="https://polygonscan.com/register" target="_blank" style="color:var(--blue)">polygonscan.com</a> и вставьте в <code>POLYGONSCAN_KEY</code>.
+  </div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <div class="summary">
+    <div class="stat-card">
+      <div class="stat-label">Суммарный баланс</div>
+      <div class="stat-val" id="s-total">—</div>
+      <div class="stat-sub" id="s-total-sub">загрузка...</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Минимальный баланс</div>
+      <div class="stat-val red" id="s-min">—</div>
+      <div class="stat-sub" id="s-min-bot">бот</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Максимальный баланс</div>
+      <div class="stat-val green" id="s-max">—</div>
+      <div class="stat-sub" id="s-max-bot">бот</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Активных ботов</div>
+      <div class="stat-val" id="s-active">—</div>
+      <div class="stat-sub" id="s-active-sub">из {{ bots|length }}</div>
+    </div>
+  </div>
+
+  <div class="section-title">Боты</div>
+  <div class="bots-grid" id="bots-grid">
+    {% for bot in bots %}
+    <div class="bot-card" id="card-{{ loop.index0 }}" onclick="selectBot({{ loop.index0 }})">
+      <div class="bot-top">
+        <span class="bot-name">{{ bot.name }}</span>
+        <span class="badge badge-load" id="badge-{{ loop.index0 }}">загрузка</span>
+      </div>
+      <div class="bot-bal" id="bal-{{ loop.index0 }}"><span class="spinner"></span></div>
+      <div class="bot-footer">
+        <div>Ставок: <span id="txn-cnt-{{ loop.index0 }}">—</span></div>
+        <div>Посл. вход: <span id="last-in-{{ loop.index0 }}">—</span></div>
+      </div>
+      <div class="bot-proxy">
+        <a href="https://polygonscan.com/address/{{ bot.proxy }}" target="_blank">
+          {{ bot.proxy[:10] }}...{{ bot.proxy[-6:] }}
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="section-title" style="margin:0">История баланса</div>
+      <div class="tabs">
+        <button class="tab active" onclick="setChartMode('all',this)">Все боты</button>
+        <button class="tab" onclick="setChartMode('sel',this)">Выбранный</button>
+      </div>
+    </div>
+    <div style="position:relative;height:220px">
+      <canvas id="chart" role="img" aria-label="График балансов ботов">История балансов</canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="section-title" style="margin:0">Транзакции USDC</div>
+      <select id="txn-bot-sel" onchange="loadTxns(this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:12px">
+        {% for bot in bots %}
+        <option value="{{ bot.proxy }}">{{ bot.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div id="txn-loading" style="color:var(--muted);font-size:13px">Выберите бота...</div>
+    <table id="txn-table" style="display:none">
+      <thead><tr><th>Время</th><th>Тип</th><th>USDC</th><th>Hash</th></tr></thead>
+      <tbody id="txn-body"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const COLORS = ['#3b82f6','#22c55e','#f59e0b','#ec4899','#a855f7','#06b6d4'];
+let botsData = [];
+let chartInst = null;
+let chartMode = 'all';
+let selIdx = null;
+let countdown = 60;
+let timer = null;
+
+function fmt(val) {
+  return val == null ? '—' : '$' + val.toFixed(2);
+}
+function relTime(ts) {
+  const s = (Date.now()/1000 - ts);
+  if (s < 60) return Math.floor(s) + 'с назад';
+  if (s < 3600) return Math.floor(s/60) + 'м назад';
+  if (s < 86400) return Math.floor(s/3600) + 'ч назад';
+  return Math.floor(s/86400) + 'д назад';
+}
+
+async function refresh() {
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.classList.add('loading');
+  icon.innerHTML = '<span class="spinner"></span>';
+  countdown = 60;
+
+  try {
+    const res = await fetch('/api/balances');
+    botsData = await res.json();
+    renderAll();
+    document.getElementById('error-banner').style.display = 'none';
+    document.getElementById('last-update').textContent =
+      'Обновлено: ' + new Date().toLocaleTimeString('ru-RU');
+  } catch(e) {
+    const b = document.getElementById('error-banner');
+    b.style.display = 'block';
+    b.textContent = 'Ошибка: ' + e.message;
+  }
+
+  btn.classList.remove('loading');
+  icon.innerHTML = '↻';
+}
+
+function renderAll() {
+  renderSummary();
+  renderCards();
+  renderChart();
+}
+
+function renderSummary() {
+  const ok = botsData.filter(b => !b.error && b.usdc != null);
+  if (!ok.length) return;
+  const total = ok.reduce((s,b) => s + b.usdc, 0);
+  const minB = ok.reduce((a,b) => b.usdc < a.usdc ? b : a);
+  const maxB = ok.reduce((a,b) => b.usdc > a.usdc ? b : a);
+
+  document.getElementById('s-total').textContent = fmt(total);
+  document.getElementById('s-total-sub').textContent = ok.length + ' ботов онлайн';
+  document.getElementById('s-min').textContent = fmt(minB.usdc);
+  document.getElementById('s-min-bot').textContent = minB.name;
+  document.getElementById('s-max').textContent = fmt(maxB.usdc);
+  document.getElementById('s-max-bot').textContent = maxB.name;
+  document.getElementById('s-active').textContent = ok.length;
+}
+
+function renderCards() {
+  botsData.forEach((bot, i) => {
+    const badge = document.getElementById('badge-' + i);
+    const bal = document.getElementById('bal-' + i);
+    const txnCnt = document.getElementById('txn-cnt-' + i);
+    const lastIn = document.getElementById('last-in-' + i);
+
+    if (bot.error) {
+      badge.textContent = 'ошибка';
+      badge.className = 'badge badge-err';
+      bal.textContent = 'N/A';
+    } else {
+      badge.textContent = 'онлайн';
+      badge.className = 'badge badge-ok';
+      bal.textContent = fmt(bot.usdc);
+    }
+
+
+    // Последние транзакции если уже загружены
+    const sel = document.getElementById('txn-bot-sel');
+    if (sel && sel.value === bot.proxy) {
+      // уже показаны в таблице
+    }
+  });
+}
+
+function selectBot(idx) {
+  selIdx = selIdx === idx ? null : idx;
+  document.querySelectorAll('.bot-card').forEach((c,i) =>
+    c.classList.toggle('selected', i === selIdx));
+  if (chartMode === 'sel') renderChart();
+
+  // Загружаем транзакции выбранного бота
+  if (selIdx !== null && botsData[selIdx]) {
+    const sel = document.getElementById('txn-bot-sel');
+    sel.value = botsData[selIdx].proxy;
+    loadTxns(botsData[selIdx].proxy);
+  }
+}
+
+function setChartMode(m, btn) {
+  chartMode = m;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderChart();
+}
+
+function renderChart() {
+  const ctx = document.getElementById('chart').getContext('2d');
+  let show = chartMode === 'sel' && selIdx !== null
+    ? [botsData[selIdx]].filter(Boolean)
+    : botsData;
+
+  if (!show.length) return;
+
+  // Собираем все метки дат из истории
+  const tsSet = new Set();
+  show.forEach(b => (b.history||[]).forEach(h => tsSet.add(h.ts)));
+  const tsList = Array.from(tsSet).sort();
+
+  let labels, datasets;
+
+  if (tsList.length === 0) {
+    // Нет истории — показываем текущие балансы как точки
+    labels = show.map(b => b.name);
+    datasets = [{
+      label: 'Баланс USDC',
+      data: show.map(b => b.usdc),
+      backgroundColor: show.map((_, i) => COLORS[i % COLORS.length]),
+      borderColor: show.map((_, i) => COLORS[i % COLORS.length]),
+      borderWidth: 2,
+      borderRadius: 4,
+    }];
+    if (chartInst) chartInst.destroy();
+    chartInst = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#6b6b75',font:{size:11}} },
+          y: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#6b6b75',font:{size:11},callback:v=>'$'+v.toFixed(0)} }
+        }
+      }
+    });
+    return;
+  }
+
+  // Есть история — линейный график
+  labels = tsList.map(ts => {
+    const d = new Date(ts * 1000);
+    return d.getMonth()+1 + '.' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  });
+
+  datasets = show.map((bot, i) => ({
+    label: bot.name,
+    data: tsList.map(ts => {
+      const pts = (bot.history||[]).filter(h => h.ts <= ts);
+      return pts.length ? pts[pts.length-1].val : null;
+    }),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: 'transparent',
+    tension: 0.3, borderWidth: 1.5, pointRadius: 2, spanGaps: true,
+  }));
+
+  if (chartInst) chartInst.destroy();
+  chartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: show.length > 1, labels:{color:'#9ca3af',font:{size:11},boxWidth:8,padding:12} },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: $${c.parsed.y?.toFixed(2)||'—'}` } }
+      },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#6b6b75',font:{size:10},maxTicksLimit:6} },
+        y: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#6b6b75',font:{size:10},callback:v=>'$'+v.toFixed(0)} }
+      }
+    }
+  });
+}
+
+async function loadTxns(proxy) {
+  const loading = document.getElementById('txn-loading');
+  const table = document.getElementById('txn-table');
+  const tbody = document.getElementById('txn-body');
+  loading.textContent = 'Загрузка транзакций...';
+  loading.style.display = 'block';
+  table.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/txns/' + proxy);
+    const txns = await res.json();
+
+    if (!txns.length) {
+      loading.textContent = 'Транзакций не найдено';
+      return;
+    }
+
+    tbody.innerHTML = txns.map(t => `
+      <tr>
+        <td style="color:#6b6b75">${t.time}</td>
+        <td class="${t.direction==='in'?'txn-in':'txn-out'}">${t.direction==='in'?'▲ Получено':'▼ Отправлено'}</td>
+        <td style="font-weight:500">${t.direction==='in'?'+':'−'}$${t.value.toFixed(2)}</td>
+        <td class="txn-hash" onclick="window.open('https://polygonscan.com/tx/${t.full_hash}','_blank')">${t.hash}</td>
+      </tr>`).join('');
+
+    // Обновляем счётчики на карточке
+    const botIdx = botsData.findIndex(b => b.proxy === proxy);
+    if (botIdx >= 0) {
+      const inTxns = txns.filter(t => t.direction === 'in');
+      document.getElementById('txn-cnt-' + botIdx).textContent = txns.length;
+      if (inTxns.length) {
+        document.getElementById('last-in-' + botIdx).textContent = relTime(inTxns[0].ts);
+      }
+    }
+
+    loading.style.display = 'none';
+    table.style.display = 'table';
+  } catch(e) {
+    loading.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+// Автообновление
+function tick() {
+  countdown--;
+  document.getElementById('countdown').textContent = countdown;
+  if (countdown <= 0) {
+    countdown = 60;
+    refresh();
+  }
+}
+
+// Запуск
+refresh();
+timer = setInterval(tick, 1000);
+
+// Загружаем транзакции первого бота
+setTimeout(() => {
+  const sel = document.getElementById('txn-bot-sel');
+  if (sel && sel.value) loadTxns(sel.value);
+}, 2000);
+</script>
+</body>
+</html>
